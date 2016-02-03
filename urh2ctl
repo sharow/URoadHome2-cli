@@ -158,12 +158,6 @@ def cmd_statistics(args):
 
 
 def cmd_status(args):
-    def is_lte(stat):
-        try:
-            return bool(int(stat['LTE_SIG_LEVEL']))
-        except ValueError:
-            return False
-
     boot(args)
     status = get_status()
     if args.all:
