@@ -5,6 +5,7 @@ import os
 import sys
 import argparse
 import time
+import json
 from itertools import (takewhile, dropwhile)
 from types import SimpleNamespace as NS
 
@@ -150,11 +151,14 @@ def cmd_statistics(args):
     boot(args)
     stat = get_statistic()
     human = byte2humanunit
-    print('=statistics=: {:^12} {:^12}'.format('rx', 'tx'))
-    print('WiMAX(today): {:^12} {:^12}'.format(human(stat.wimax_rx_day), human(stat.wimax_tx_day)))
-    print('WiMAX(month): {:^12} {:^12}'.format(human(stat.wimax_rx_month), human(stat.wimax_tx_month)))
-    print('LTE(today)  : {:^12} {:^12}'.format(human(stat.lte_rx_day), human(stat.lte_tx_day)))
-    print('LTE(month)  : {:^12} {:^12}'.format(human(stat.lte_rx_month), human(stat.lte_tx_month)))
+    if args.json:
+        print(json.dumps(stat.__dict__))
+    else:
+        print('=statistics=: {:^12} {:^12}'.format('rx', 'tx'))
+        print('WiMAX(today): {:^12} {:^12}'.format(human(stat.wimax_rx_day), human(stat.wimax_tx_day)))
+        print('WiMAX(month): {:^12} {:^12}'.format(human(stat.wimax_rx_month), human(stat.wimax_tx_month)))
+        print('LTE(today)  : {:^12} {:^12}'.format(human(stat.lte_rx_day), human(stat.lte_tx_day)))
+        print('LTE(month)  : {:^12} {:^12}'.format(human(stat.lte_rx_month), human(stat.lte_tx_month)))
 
 
 def cmd_status(args):
@@ -186,7 +190,6 @@ def cmd_status(args):
             print('WiMAX Status: {}'.format(status['WM_Status']))
         
 
-
 def cmd_switch(args):
     boot(args)
     if args.lte:
@@ -211,6 +214,7 @@ if __name__ == '__main__':
     sub_parser = parser.add_subparsers(title='command')
 
     p = sub_parser.add_parser('stat', help='show statistics')
+    p.add_argument('--json', action='store_true',help='output json')
     p.set_defaults(func=cmd_statistics)
 
     p = sub_parser.add_parser('status', help='show status')
