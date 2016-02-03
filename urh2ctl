@@ -165,15 +165,15 @@ def cmd_status(args):
             v = status[k]
             print('{:<20}: {}'.format(k, v))
     else:
-        siglevels = {
-            0: 'No Signal',
-            1: 'Very Weak Signal',
-            2: 'Weak Signal',
-            3: 'Normal Signal',
-            4: 'Good Signal',
-            5: 'Very Good Signal',
-            6: 'Excellent Signal'
-        }
+        siglevels = [
+            'No Signal',
+            'Very Weak Signal',
+            'Weak Signal',
+            'Normal Signal',
+            'Good Signal',
+            'Very Good Signal',
+            'Excellent Signal'
+        ]
         if status_is_lte(status):
             level = siglevels[int(status['LTE_SIG_LEVEL'])]
             print('Mode: LTE (High Speed Mode)')
