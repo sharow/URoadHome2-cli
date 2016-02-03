@@ -1,0 +1,235 @@
+#!/usr/bin/env python
+# -*- Mode: python; tab-width: 4; indent-tabs-mode: nil; coding: utf-8; -*-
+
+import os
+import sys
+import argparse
+import time
+from itertools import (takewhile, dropwhile)
+from types import SimpleNamespace as NS
+
+import requests
+
+
+session = None
+router_ip = '192.168.100.254'
+
+
+def boot(args):
+    global session
+    if session is None:
+        session = requests.Session()
+        user = args.user or os.environ.get('URH2_USER', None) or 'admin'
+        password = args.password or os.environ.get('URH2_PASSWORD', None)
+        if not (user and password):
+            print('need user and password for BASIC auth')
+            sys.exit(1)
+        session.auth = (user, password)
+
+
+def str2byteunit(s):
+    b, kb, mb, gb = 'bytes Kbytes Mbytes Gbytes'.split()
+    if gb in s:
+        r = float(s.replace(gb, '')) * 1024 * 1024 * 1024
+    elif mb in s:
+        r = float(s.replace(mb, '')) * 1024 * 1024
+    elif kb in s:
+        r = float(s.replace(kb, '')) * 1024
+    elif b in s:
+        r = float(s.replace(b, ''))
+    else:
+        r = -1
+    return int(r)
+
+
+def byte2humanunit(b):
+    assert b >= 0
+    factor = 8
+    if b < (factor * 1024):
+        return str(b) + ' B'
+    elif b < (factor * 1024 * 1024):
+        return '{:.2f} KiB'.format(b / 1024)
+    elif b < (factor * 1024 * 1024 * 1024):
+        return '{:.2f} MiB'.format(b / (1024 * 1024))
+    else:
+        return '{:.2f} GiB'.format(b / (1024 * 1024 * 1024))
+
+
+def get_statistic():
+    r = session.get('http://{}/usr/jp/adm/statistic.asp'.format(router_ip))
+    r.encoding = 'utf-8'
+    data = [body for body in r.text.split('\n') if 'get_data = ' in body and len(body) > 20][0]
+    data = data.partition('=')[-1].replace('"', '').split(';')
+    ns = NS()
+    unit = str2byteunit
+    ns.IMSI = data[0].strip()
+    ns.write_count = int(data[1])  # whats this??
+    ns.lte_tx_day = unit(data[2])
+    ns.lte_rx_day = unit(data[3])
+    ns.lte_tx_month = unit(data[7])
+    ns.lte_rx_month = unit(data[8])
+    ns.wimax_tx_day = unit(data[4])
+    ns.wimax_rx_day = unit(data[5])
+    ns.wimax_tx_month = unit(data[9])
+    ns.wimax_rx_month = unit(data[10])
+    return ns
+
+
+def get_status():
+    r = session.get('http://{}/usr/jp/basic/state.asp'.format(router_ip))
+    r.encoding = 'utf-8'
+    contents = dropwhile(lambda x: '= WiFi Informations =' not in x,
+                         takewhile(lambda x: '= System Informations =' not in x,
+                                   r.text.split('\n')))
+    d = {}
+    for line in filter(lambda x: 'var ' in x, contents):
+        key, _, value = line.partition('=')
+        value = value.replace('"', '').replace(';', '').strip()
+        key = key.replace(';', '')[4:].strip()
+        d[key] = value
+    return d
+
+
+def status_is_lte(status):
+    try:
+        return bool(int(status['LTE_SIG_LEVEL']))
+    except (ValueError, KeyError):
+        return False
+
+
+def switch_to_lte():
+    def lte_enable():
+        try:
+            return status_is_lte(get_status())
+        except requests.exceptions.ReadTimeout:
+            return False
+
+    if status_is_lte(get_status()):
+        print('Already LTE.')
+        return
+    try:
+        r = session.post('http://{}/goform/switch_high_mode'.format(router_ip),
+                         data='n/a', timeout=1.0)
+    except requests.exceptions.ReadTimeout:
+        print('switch request sent')
+    for i in range(5):
+        print('waiting for LTE connection...')
+        time.sleep(1.0)
+        if lte_enable():
+            print('LTE connected!')
+            break
+    else:
+        print('...no LTE connection yet.')
+
+
+def switch_to_wimax():
+    def wimax_enable():
+        try:
+            return not status_is_lte(get_status())
+        except requests.exceptions.ReadTimeout:
+            return False
+    if not status_is_lte(get_status()):
+        print('Already WiMAX.')
+        return
+    try:
+        r = session.post('http://{}/goform/switch_limit_mode'.format(router_ip),
+                         data='n/a', timeout=1.0)
+    except requests.exceptions.ReadTimeout:
+        print('switch request sent')
+    for i in range(8):
+        print('waiting for WiMAX connection...')
+        time.sleep(1.0)
+        if wimax_enable():
+            print('WiMAX connected!')
+            break
+    else:
+        print('...no WiMAX connection yet.')
+
+
+def cmd_statistics(args):
+    boot(args)
+    stat = get_statistic()
+    human = byte2humanunit
+    print('=statistics=: {:^12} {:^12}'.format('rx', 'tx'))
+    print('WiMAX(today): {:^12} {:^12}'.format(human(stat.wimax_rx_day), human(stat.wimax_tx_day)))
+    print('WiMAX(month): {:^12} {:^12}'.format(human(stat.wimax_rx_month), human(stat.wimax_tx_month)))
+    print('LTE(today)  : {:^12} {:^12}'.format(human(stat.lte_rx_day), human(stat.lte_tx_day)))
+    print('LTE(month)  : {:^12} {:^12}'.format(human(stat.lte_rx_month), human(stat.lte_tx_month)))
+
+
+def cmd_status(args):
+    def is_lte(stat):
+        try:
+            return bool(int(stat['LTE_SIG_LEVEL']))
+        except ValueError:
+            return False
+
+    boot(args)
+    status = get_status()
+    if args.all:
+        for k in sorted(status.keys()):
+            v = status[k]
+            print('{:<20}: {}'.format(k, v))
+    else:
+        siglevels = {
+            0: 'No Signal',
+            1: 'Very Weak Signal',
+            2: 'Weak Signal',
+            3: 'Normal Signal',
+            4: 'Good Signal',
+            5: 'Very Good Signal',
+            6: 'Excellent Signal'
+        }
+        if status_is_lte(status):
+            level = siglevels[int(status['LTE_SIG_LEVEL'])]
+            print('Mode: LTE (High Speed Mode)')
+            print('LTE Signal Level: {} ({})'.format(status['LTE_SIG_LEVEL'], level))
+            print('LTE Connection Status: {}'.format(status['LTE_Con_Status']))
+        else:
+            level = siglevels[int(status['WM_SignalStrength'])]
+            print('Mode: WiMAX (No Limit Mode)')
+            print('WiMAX Signal Level: {} ({})'.format(status['WM_SignalStrength'], level))
+            print('WiMAX Status: {}'.format(status['WM_Status']))
+        
+
+
+def cmd_switch(args):
+    boot(args)
+    if args.lte:
+        switch_to_lte()
+        return
+    if args.wimax:
+        switch_to_wimax()
+        return
+    if status_is_lte(get_status()):
+        print('switch LTE(High Speed Mode) -> WiMAX(No Limit Mode)')
+        switch_to_wimax()
+    else:
+        print('switch WiMAX(No Limit Mode) -> LTE(High Speed Mode)')
+        switch_to_lte()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog=__file__, description='URoadHome2+ control')
+    parser.add_argument('--user', metavar='USER', default='admin', type=str,
+                        help='BASIC auth user name (default: admin)')
+    parser.add_argument('--password', metavar='PASSWORD', type=str, help='BASIC auth password')
+    sub_parser = parser.add_subparsers(title='command')
+
+    p = sub_parser.add_parser('stat', help='show statistics')
+    p.set_defaults(func=cmd_statistics)
+
+    p = sub_parser.add_parser('status', help='show status')
+    p.add_argument('--all', action='store_true',help='show all')
+    p.set_defaults(func=cmd_status)
+
+    p = sub_parser.add_parser('switch', help='switch mode')
+    p.add_argument('--lte', action='store_true',help='switch to LTE')
+    p.add_argument('--wimax', action='store_true',help='switch to WiMAX')
+    p.set_defaults(func=cmd_switch)
+
+    args = parser.parse_args()
+    if 'func' in args:
+        args.func(args)
+    else:
+        parser.print_help()
