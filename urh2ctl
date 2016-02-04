@@ -79,11 +79,11 @@ def get_statistic():
 def get_status():
     r = session.get('http://{}/usr/jp/basic/state.asp'.format(router_ip))
     r.encoding = 'utf-8'
-    contents = dropwhile(lambda x: '= WiFi Informations =' not in x,
-                         takewhile(lambda x: '= System Informations =' not in x,
-                                   r.text.split('\n')))
     d = {}
-    for line in filter(lambda x: 'var ' in x, contents):
+    for line in filter(lambda x: 'var ' in x,
+                       dropwhile(lambda x: '= WiFi Informations =' not in x,
+                                 takewhile(lambda x: '= System Informations =' not in x,
+                                           r.text.split('\n')))):
         key, _, value = line.partition('=')
         value = value.replace('"', '').replace(';', '').strip()
         key = key.replace(';', '')[4:].strip()
@@ -109,8 +109,8 @@ def switch_to_lte():
         print('Already LTE.')
         return
     try:
-        r = session.post('http://{}/goform/switch_high_mode'.format(router_ip),
-                         data='n/a', timeout=1.0)
+        session.post('http://{}/goform/switch_high_mode'.format(router_ip),
+                     data='n/a', timeout=1.0)
     except requests.exceptions.ReadTimeout:
         print('switch request sent')
     for i in range(5):
@@ -133,8 +133,8 @@ def switch_to_wimax():
         print('Already WiMAX.')
         return
     try:
-        r = session.post('http://{}/goform/switch_limit_mode'.format(router_ip),
-                         data='n/a', timeout=1.0)
+        session.post('http://{}/goform/switch_limit_mode'.format(router_ip),
+                     data='n/a', timeout=1.0)
     except requests.exceptions.ReadTimeout:
         print('switch request sent')
     for i in range(8):
@@ -188,7 +188,7 @@ def cmd_status(args):
             print('Mode: WiMAX (No Limit Mode)')
             print('WiMAX Signal Level: {} ({})'.format(status['WM_SignalStrength'], level))
             print('WiMAX Status: {}'.format(status['WM_Status']))
-        
+
 
 def cmd_switch(args):
     boot(args)
@@ -214,16 +214,16 @@ if __name__ == '__main__':
     sub_parser = parser.add_subparsers(title='command')
 
     p = sub_parser.add_parser('stat', help='show statistics')
-    p.add_argument('--json', action='store_true',help='output json')
+    p.add_argument('--json', action='store_true', help='output json')
     p.set_defaults(func=cmd_statistics)
 
     p = sub_parser.add_parser('status', help='show status')
-    p.add_argument('--all', action='store_true',help='show all')
+    p.add_argument('--all', action='store_true', help='show all')
     p.set_defaults(func=cmd_status)
 
     p = sub_parser.add_parser('switch', help='switch mode')
-    p.add_argument('--lte', action='store_true',help='switch to LTE')
-    p.add_argument('--wimax', action='store_true',help='switch to WiMAX')
+    p.add_argument('--lte', action='store_true', help='switch to LTE')
+    p.add_argument('--wimax', action='store_true', help='switch to WiMAX')
     p.set_defaults(func=cmd_switch)
 
     args = parser.parse_args()
