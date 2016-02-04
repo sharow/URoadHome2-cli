@@ -13,14 +13,14 @@ import requests
 
 
 session = None
-router_ip = '192.168.100.254'
+router_ip = os.environ.get('URH2_IP') or '192.168.100.254'
 
 
 def boot(args):
     global session
     if session is None:
         session = requests.Session()
-        user = args.user or os.environ.get('URH2_USER', None) or 'admin'
+        user = args.user or os.environ.get('URH2_USER') or 'admin'
         password = args.password or os.environ.get('URH2_PASSWORD', None)
         if not (user and password):
             print('need user and password for BASIC auth')
