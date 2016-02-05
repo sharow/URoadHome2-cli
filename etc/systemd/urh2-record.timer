@@ -1,0 +1,9 @@
+[Unit]
+Description=URoadHome2+ record
+
+[Timer]
+OnBootSec=1min
+OnCalendar=*:00/10:00
+
+[Install]
+WantedBy=timers.target

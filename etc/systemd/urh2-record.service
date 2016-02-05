@@ -1,0 +1,12 @@
+[Unit]
+Description=URoadHome2+ record
+
+[Service]
+Environment="URH2_PASSWORD=<route-password>"
+Type=simple
+User=<user>
+Group=<group>
+ExecStart=/path/to/urh2ctl record --datadir /path/to/urh2/db
+
+[Install]
+WantedBy=default.target
