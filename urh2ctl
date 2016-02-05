@@ -6,6 +6,9 @@ import sys
 import argparse
 import time
 import json
+import pickle
+import datetime as dt
+from pathlib import Path
 from itertools import (takewhile, dropwhile)
 from types import SimpleNamespace as NS
 
@@ -147,6 +150,35 @@ def switch_to_wimax():
         print('...no WiMAX connection yet.')
 
 
+def cmd_record(args):
+    boot(args)
+    stat = get_statistic()
+    stat.at = dt.datetime.now().replace(microsecond=0)
+    del stat.IMSI
+    del stat.write_count
+    del stat.lte_tx_month
+    del stat.lte_rx_month
+    del stat.wimax_tx_month
+    del stat.wimax_rx_month
+    dire = Path(args.datadir)
+    path = dire / '{:%Y-%m-%d}.pickles'.format(stat.at)
+    with path.open('a+b') as f:
+        pickle.dump(stat, f)
+
+
+def cmd_dump(args):
+    dire = Path(args.datadir)
+    for path in sorted(dire.glob('*.pickles')):
+        with path.open('rb') as f:
+            while True:
+                try:
+                    stat = pickle.load(f)
+                except EOFError:
+                    break
+                else:
+                    print(stat)
+
+
 def cmd_statistics(args):
     boot(args)
     stat = get_statistic()
@@ -225,6 +257,14 @@ if __name__ == '__main__':
     p.add_argument('--lte', action='store_true', help='switch to LTE')
     p.add_argument('--wimax', action='store_true', help='switch to WiMAX')
     p.set_defaults(func=cmd_switch)
+
+    p = sub_parser.add_parser('record', help='record stat')
+    p.add_argument('--datadir', metavar='PATH', default='.', type=str, help='data location')
+    p.set_defaults(func=cmd_record)
+
+    p = sub_parser.add_parser('dump', help='dump record')
+    p.add_argument('--datadir', metavar='PATH', default='.', type=str, help='data location')
+    p.set_defaults(func=cmd_dump)
 
     args = parser.parse_args()
     if 'func' in args:

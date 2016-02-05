@@ -4,7 +4,7 @@
 
 ```
 usage: ./urh2ctl [-h] [--user USER] [--password PASSWORD]
-                 {stat,status,switch} ...
+                 {stat,status,switch,record,dump} ...
 
 URoadHome2+ control
 
@@ -14,15 +14,17 @@ optional arguments:
   --password PASSWORD   BASIC auth password
 
 command:
-  {stat,status,switch}
+  {stat,status,switch,record,dump}
   stat                show statistics
   status              show status
   switch              switch mode
+  record              record stat
+  dump                dump record
 ```
 
 
 ## 必要なもの
-Pythonの`requests`モジュールが必須。Python3.5で動作確認しているが、3系なら動くと思われる。
+Pythonの`requests`モジュールが必須。動作にはPython3.5以上が必要。
 
 
 
@@ -80,6 +82,12 @@ $ ./urh2ctl switch --wimax
 Already WiMAX.
 $
 ```
+
+## 記録
+`./urh2ctl record --datadir ./db`とすると`stat`の内容を`pickle`で吐く。データは日付ごとのファイルで、pickleは追記が可能なので、1日の分はそのファイルに書き出している。読み込む際は`pickle.load(fp)`をEOFErrorが出るまで繰り返せばよい。
+
+`./urh2ctl dump --datadir ./db`で記録されたデータを見ることができる。これらのデータを使えばグラフ化や3GiB制限の回避のための情報が得られる。
+
 
 
 ## その他
