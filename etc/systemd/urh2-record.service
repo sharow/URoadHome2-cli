@@ -2,7 +2,7 @@
 Description=URoadHome2+ record
 
 [Service]
-Environment="URH2_PASSWORD=<route-password>"
+Environment="URH2_PASSWORD=<router-password>"
 Type=simple
 User=<user>
 Group=<group>
