@@ -179,6 +179,23 @@ def cmd_dump(args):
                     print(stat)
 
 
+def cmd_summary(args):
+    dire = Path(args.datadir)
+    daysum = []
+    for path in sorted(dire.glob('*.pickles')):
+        stats = []
+        with path.open('rb') as f:
+            while True:
+                try:
+                    stats.append(pickle.load(f))
+                except EOFError:
+                    break
+        daysum.append(max(stats, key=lambda x: x.lte_rx_day))
+    for i in daysum:
+        lte_trans = i.lte_rx_day + i.lte_tx_day
+        print(i.at.date(), lte_trans // (1024 * 1024), 'MiB')
+
+
 def cmd_statistics(args):
     boot(args)
     stat = get_statistic()
@@ -265,6 +282,10 @@ if __name__ == '__main__':
     p = sub_parser.add_parser('dump', help='dump record')
     p.add_argument('--datadir', metavar='PATH', default='.', type=str, help='data location')
     p.set_defaults(func=cmd_dump)
+
+    p = sub_parser.add_parser('summary', help='transfer summary')
+    p.add_argument('--datadir', metavar='PATH', default='.', type=str, help='data location')
+    p.set_defaults(func=cmd_summary)
 
     args = parser.parse_args()
     if 'func' in args:
