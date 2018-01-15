@@ -10,6 +10,7 @@ import pickle
 import datetime as dt
 from pathlib import Path
 from itertools import (takewhile, dropwhile)
+from operator import attrgetter
 from types import SimpleNamespace as NS
 
 import requests
@@ -31,14 +32,14 @@ def boot(args):
         session.auth = (user, password)
 
 
-def str2byteunit(s):
+def str2byteunit(s: str) -> int:
     b, kb, mb, gb = 'bytes Kbytes Mbytes Gbytes'.split()
     if gb in s:
-        r = float(s.replace(gb, '')) * 1024 * 1024 * 1024
+        r = float(s.replace(gb, '')) * 1024 ** 3
     elif mb in s:
-        r = float(s.replace(mb, '')) * 1024 * 1024
+        r = float(s.replace(mb, '')) * 1024 ** 2
     elif kb in s:
-        r = float(s.replace(kb, '')) * 1024
+        r = float(s.replace(kb, '')) * 1024 ** 1
     elif b in s:
         r = float(s.replace(b, ''))
     else:
@@ -46,17 +47,17 @@ def str2byteunit(s):
     return int(r)
 
 
-def byte2humanunit(b):
+def byte2humanunit(b: int) -> str:
     assert b >= 0
     factor = 8
     if b < (factor * 1024):
         return str(b) + ' B'
-    elif b < (factor * 1024 * 1024):
-        return '{:.2f} KiB'.format(b / 1024)
-    elif b < (factor * 1024 * 1024 * 1024):
-        return '{:.2f} MiB'.format(b / (1024 * 1024))
+    elif b < (factor * 1024 ** 1):
+        return '{:.2f} KiB'.format(b / (1024 ** 1))
+    elif b < (factor * 1024 ** 2):
+        return '{:.2f} MiB'.format(b / (1024 ** 2))
     else:
-        return '{:.2f} GiB'.format(b / (1024 * 1024 * 1024))
+        return '{:.2f} GiB'.format(b / (1024 ** 3))
 
 
 def get_statistic():
@@ -82,11 +83,11 @@ def get_statistic():
 def get_status():
     r = session.get('http://{}/usr/jp/basic/state.asp'.format(router_ip))
     r.encoding = 'utf-8'
+    contents = dropwhile(lambda x: '= WiFi Informations =' not in x,
+                         takewhile(lambda x: '= System Informations =' not in x,
+                                   r.text.split('\n')))
     d = {}
-    for line in filter(lambda x: 'var ' in x,
-                       dropwhile(lambda x: '= WiFi Informations =' not in x,
-                                 takewhile(lambda x: '= System Informations =' not in x,
-                                           r.text.split('\n')))):
+    for line in filter(lambda x: 'var ' in x, contents):
         key, _, value = line.partition('=')
         value = value.replace('"', '').replace(';', '').strip()
         key = key.replace(';', '')[4:].strip()
@@ -115,8 +116,8 @@ def switch_to_lte():
         session.post('http://{}/goform/switch_high_mode'.format(router_ip),
                      data='n/a', timeout=1.0)
     except requests.exceptions.ReadTimeout:
-        print('switch request sent')
-    for i in range(5):
+        print('switch requested')
+    for i in range(8):
         print('waiting for LTE connection...')
         time.sleep(1.0)
         if lte_enable():
@@ -139,7 +140,7 @@ def switch_to_wimax():
         session.post('http://{}/goform/switch_limit_mode'.format(router_ip),
                      data='n/a', timeout=1.0)
     except requests.exceptions.ReadTimeout:
-        print('switch request sent')
+        print('switch requested')
     for i in range(8):
         print('waiting for WiMAX connection...')
         time.sleep(1.0)
@@ -181,7 +182,7 @@ def cmd_dump(args):
 
 def cmd_summary(args):
     dire = Path(args.datadir)
-    daysum = []
+    lte_sum, wimax_sum = [], []
     for path in sorted(dire.glob('*.pickles')):
         stats = []
         with path.open('rb') as f:
@@ -190,10 +191,21 @@ def cmd_summary(args):
                     stats.append(pickle.load(f))
                 except EOFError:
                     break
-        daysum.append(max(stats, key=lambda x: x.lte_rx_day))
-    for i in daysum:
-        lte_trans = i.lte_rx_day + i.lte_tx_day
-        print(i.at.date(), lte_trans // (1024 * 1024), 'MiB')
+        stats = stats[1:]
+        if len(stats) == 0:
+            continue
+        lte_sum.append(max(stats, key=attrgetter('lte_rx_day')))
+        wimax_sum.append(max(stats, key=attrgetter('wimax_rx_day')))
+    summary = [(lte.at.date(),
+                lte.lte_rx_day + lte.lte_tx_day,
+                wimax.wimax_rx_day + wimax.wimax_tx_day)
+               for lte,wimax in zip(lte_sum, wimax_sum)]
+    MB = 1024 * 1024
+    for at,lte,wimax in summary:
+        print('{}: LTE:{:4d}MiB  WiMAX:{:4d}MiB'.format(at, lte // MB, wimax // MB))
+    if len(summary) >= 4:
+        print('LTE Past 3 days        : {:4d}MiB'.format(sum(x[1] for x in summary[-4:-1]) // MB))
+        print('LTE Past 2 days + today: {:4d}MiB'.format(sum(x[1] for x in summary[-3:]) // MB))
 
 
 def cmd_statistics(args):
@@ -218,15 +230,15 @@ def cmd_status(args):
             v = status[k]
             print('{:<20}: {}'.format(k, v))
     else:
-        siglevels = [
-            'No Signal',
-            'Very Weak Signal',
-            'Weak Signal',
-            'Normal Signal',
-            'Good Signal',
-            'Very Good Signal',
-            'Excellent Signal'
-        ]
+        siglevels = {
+            0: 'No Signal',
+            1: 'Very Weak Signal',
+            2: 'Weak Signal',
+            3: 'Normal Signal',
+            4: 'Good Signal',
+            5: 'Very Good Signal',
+            6: 'Excellent Signal'
+        }
         if status_is_lte(status):
             level = siglevels[int(status['LTE_SIG_LEVEL'])]
             print('Mode: LTE (High Speed Mode)')
