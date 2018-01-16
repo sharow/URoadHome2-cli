@@ -4,7 +4,7 @@
 
 ```
 usage: ./urh2ctl [-h] [--user USER] [--password PASSWORD]
-                 {stat,status,switch,record,dump} ...
+                 {stat,status,switch,record,dump,summary} ...
 
 URoadHome2+ control
 
@@ -14,12 +14,13 @@ optional arguments:
   --password PASSWORD   BASIC auth password
 
 command:
-  {stat,status,switch,record,dump}
-  stat                show statistics
-  status              show status
-  switch              switch mode
-  record              record stat
-  dump                dump record
+  {stat,status,switch,record,dump,summary}
+    stat                show statistics
+    status              show status
+    switch              switch mode
+    record              record stat
+    dump                dump record
+    summary             transfer summary
 ```
 
 
@@ -84,9 +85,25 @@ $
 ```
 
 ## 記録
-`./urh2ctl record --datadir ./db`とすると`stat`の内容を`pickle`で吐く。データは日付ごとのファイルで、pickleは追記が可能なので、1日の分はそのファイルに書き出している。読み込む際は`pickle.load(fp)`をEOFErrorが出るまで繰り返せばよい。
+`./urh2ctl record --datadir ./db`とすると`stat`の内容を`pickle`で吐く。データは日付ごとのファイルで、pickleは追記が可能なので、1日の分はそのファイルに書き出している。読み込む際は`pickle.load(fp)`を`EOFError`が出るまで繰り返せばよい。
 
-`./urh2ctl dump --datadir ./db`で記録されたデータを見ることができる。これらのデータを使えばグラフ化や3GiB制限の回避のための情報が得られる。
+`./urh2ctl dump --datadir ./db`とすると記録されたデータをそのまま`print`で吐きだす。
+
+`./urh2ctl summary --datadir ./db`とすると日ごとの通信量を一覧表示する。
+
+```
+$ URH2_PASSWORD=<router-password> ./urh2ctl summary --datadir /somewhere/db
+2018-01-11: LTE:3060MiB  WiMAX:   0MiB
+2018-01-12: LTE:1982MiB  WiMAX:   0MiB
+2018-01-13: LTE:2725MiB  WiMAX:   0MiB
+2018-01-14: LTE:4250MiB  WiMAX: 341MiB
+2018-01-15: LTE:   0MiB  WiMAX:3261MiB
+2018-01-16: LTE:2803MiB  WiMAX: 535MiB
+LTE Past 3 days        : 6976MiB
+LTE Past 2 days + today: 7053MiB
+```
+
+2018年現在、WiMAX2+(LTE)は過去3日間(**今日を含まない**)の通信量が10GiBを超えると制限がかかる。
 
 
 
